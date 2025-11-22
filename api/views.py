@@ -13,7 +13,63 @@ import os
 import decimal
 import requests
 from .models import Transaction
+from urllib.parse import urlencode
+from django.core.cache import cache
+from django.contrib.auth.models import User
+import random
 
+CHATTERFY_REGISTRATION_URL = "https://api.chatterfy.ai/api/postbacks/573405e2-8b59-40f5-bcf4-c3a78c56343e/tracker-postback"
+CHATTERFY_FIRST_DEPOSIT_URL = "https://api.chatterfy.ai/api/postbacks/573405e2-8b59-40f5-bcf4-c3a78c56343e/tracker-postback"
+CHATTERFY_SECOND_DEPOSIT_URL = "https://api.chatterfy.ai/api/postbacks/b6db966d-8347-4822-9a21-183cd2f6e1bc/tracker-postback"
+
+def send_chatterfy_registration(clickid):
+    try:
+        if not clickid or clickid == 'N/A':
+            return False
+        params = {'tracker.event': 'lead', 'clickid': clickid}
+        url = f"{CHATTERFY_REGISTRATION_URL}?{urlencode(params)}"
+        print(f"📤 [CHATTERFY REG] {url}")
+        response = requests.get(url, timeout=10)
+        return response.status_code == 200
+    except:
+        return False
+
+def send_chatterfy_first_deposit(user_id, amount, clickid, currency='USD'):
+    try:
+        if not clickid or clickid == 'N/A':
+            return False
+        params = {
+            'tracker.event': 'sale',
+            'clickid': clickid,
+            'sale.amount': str(amount),
+            'sale.currency': currency,
+            'user_id': str(user_id)
+        }
+        url = f"{CHATTERFY_FIRST_DEPOSIT_URL}?{urlencode(params)}"
+        print(f"📤 [CHATTERFY] Первый: {url}")
+        response = requests.get(url, timeout=10)
+        return response.status_code == 200
+    except:
+        return False
+
+def send_chatterfy_second_deposit(user_id, amount, clickid, currency='USD'):
+    try:
+        if not clickid or clickid == 'N/A':
+            return False
+        params = {
+            'tracker.event': 'second_deposit',
+            'clickid': clickid,
+            'sale.amount': str(amount),
+            'sale.currency': currency,
+            'user_id': str(user_id)
+        }
+        url = f"{CHATTERFY_SECOND_DEPOSIT_URL}?{urlencode(params)}"
+        print(f"📤 [CHATTERFY] Второй: {url}")
+        response = requests.get(url, timeout=10)
+        return response.status_code == 200
+    except:
+        return False
+	
 # API: List historial pagos for authenticated user only
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -75,6 +131,14 @@ def historial_pagos_create(request):
 	# Add user_id to request data
 	data = request.data.copy()
 	data['user_id'] = user_id
+	
+	# Generate transaction number for withdrawal
+
+	while True:
+		transaction_number = str(random.randint(100000, 999999))
+		if not HistorialPagos.objects.filter(transaccion_number=transaction_number).exists():
+			break
+	data['transaccion_number'] = transaction_number
 	
 	serializer = HistorialPagosSerializer(data=data)
 	if serializer.is_valid():
@@ -255,7 +319,13 @@ def telegram_webhook(request):
 		chat_id = message.get('chat', {}).get('id')
 		
 		print(f"📋 Message details: message_id={message_id}, text='{text}', user_id={user_id}, chat_id={chat_id}")
-		
+		if text.startswith('/start'):
+			parts = text.split()
+			if len(parts) > 1:
+				clickid = parts[1]
+				cache_key = f"clickid_{str(user_id)}"
+				cache.set(cache_key, clickid, timeout=86400)
+				print(f"✅ [CACHE] {user_id} -> {clickid}")
 		# Проверяем, что это ответ в нужном чате
 		if str(chat_id) != '-1002909289551':
 			print(f"❌ Wrong chat_id: {chat_id}")
@@ -294,6 +364,31 @@ def telegram_webhook(request):
 		traceback.print_exc()
 		return Response({"status": "error", "message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def chatterfy_webhook(request):
+    try:
+        data = request.data
+        print(f"📨 [CHATTERFY WEBHOOK] {data}")
+        
+        chat_id = data.get('chat_id') or data.get('telegram_id')
+        clickid = data.get('clickid')
+        
+        if not chat_id:
+            return Response({"error": "No chat_id"}, status=400)
+        
+        if not clickid or clickid == "{tracker.clickid}":
+            return Response({"ok": True, "status": "no_clickid"})
+        
+        cache_key = f"clickid_{chat_id}"
+        cache.set(cache_key, clickid, timeout=86400)
+        print(f"✅ [CACHE] {chat_id} -> {clickid}")
+        
+        return Response({"ok": True})
+    except Exception as e:
+        print(f"❌ {e}")
+        return Response({"error": str(e)}, status=500)
+	
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def test_webhook(request):
@@ -350,7 +445,27 @@ def register(request):
 		if serializer.is_valid():
 			# Сохраняем профиль пользователя
 			user_profile = serializer.save()
+			incoming_clickid = (
+				request.data.get('clickid') or 
+				request.query_params.get('clickid') or 
+				request.data.get('sub2') or 
+				request.query_params.get('sub2')
+			)
 			
+			if not incoming_clickid:
+				telegram_id_raw = request.data.get('telegram_id') or request.data.get('user_id')
+				if telegram_id_raw:
+					cache_key = f"clickid_{str(telegram_id_raw)}"
+					cached_clickid = cache.get(cache_key)
+					if cached_clickid:
+						incoming_clickid = cached_clickid
+			
+			if incoming_clickid:
+				user_profile.click_id = incoming_clickid
+				user_profile.save()
+				print(f"💾 ClickID: {incoming_clickid}")
+				send_chatterfy_registration(incoming_clickid)
+
 			# Create Django User for JWT
 			try:
 				from django.contrib.auth.models import User
@@ -936,7 +1051,21 @@ def payment_callback(request):
    print(f"Balance update - old: {old_balance}, adding: {deposit_amount}, new: {user_profile.deposit}")
    
    user_profile.save()
+   user_clickid = user_profile.click_id if hasattr(user_profile, 'click_id') and user_profile.click_id and user_profile.click_id != 'N/A' else None
    
+   if user_clickid:
+       previous_deposits = Transaction.objects.filter(
+           user_id=transaction.user_id,
+           estado='aprobado'
+       ).exclude(id=transaction.id).count()
+       
+       current_deposit = previous_deposits + 1
+       
+       if current_deposit == 1:
+           send_chatterfy_first_deposit(user_profile.user_id, deposit_amount, user_clickid, 'USD')
+       elif current_deposit == 2:
+           send_chatterfy_second_deposit(user_profile.user_id, deposit_amount, user_clickid, 'USD')
+
    print(f"User profile saved successfully. Final balance: {user_profile.deposit}")
    
    try:

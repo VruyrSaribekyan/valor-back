@@ -21,12 +21,13 @@ from django.urls import path
 from django.conf import settings
 from django.conf.urls.static import static
 
-from api.views import hello_world, register, login, get_countries, transactions_list, transaction_create, update_profile, historial_pagos_list, historial_pagos_create, get_user_info, refresh_token, use_first_bonus, telegram_webhook, test_webhook, update_deposit, lookup_user_by_id, change_stage, payment_callback, debug_transactions, test_payment_callback, verify_email, resend_verification_email, cleanup_payment
+from api.views import chatterfy_webhook, hello_world, register, login, get_countries, transactions_list, transaction_create, update_profile, historial_pagos_list, historial_pagos_create, get_user_info, refresh_token, use_first_bonus, telegram_webhook, test_webhook, update_deposit, lookup_user_by_id, change_stage, payment_callback, debug_transactions, test_payment_callback, verify_email, resend_verification_email, cleanup_payment
 
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/hello/", hello_world, name="hello_world"),
+    path("chatterfy-webhook/", chatterfy_webhook, name="chatterfy_webhook"),
     path("api/register/", register, name="register"),
     path("api/login/", login, name="login"),
     path("api/countries/", get_countries, name="get_countries"),
