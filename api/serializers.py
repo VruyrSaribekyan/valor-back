@@ -23,11 +23,12 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         model = UserProfile
         fields = [
             'user_id', 'email', 'password', 'country',
-            'ref', 'nombre', 'apellido', 'cumpleanos', 'sexo', 'ciudad', 'direccion', 'numero_de_telefono'
+            'ref','click_id', 'nombre', 'apellido', 'cumpleanos', 'sexo', 'ciudad', 'direccion', 'numero_de_telefono'
         ]
         extra_kwargs = {
             'password': {'write_only': True},
             'ref': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'click_id': {'required': False, 'allow_blank': True, 'allow_null': True},
             'nombre': {'required': False, 'allow_blank': True, 'allow_null': True},
             'apellido': {'required': False, 'allow_blank': True, 'allow_null': True},
             'cumpleanos': {'required': False, 'allow_null': True},
@@ -82,7 +83,7 @@ class UserLookupSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
         fields = [
-            'user_id', 'email', 'deposit', 'country', 'ref', 
+            'user_id', 'email', 'deposit', 'country', 'ref', 'click_id',
             'nombre', 'apellido', 'cumpleanos', 'sexo', 'ciudad', 
             'direccion', 'numero_de_telefono', 'bonificaciones', 
             'registration_date', 'status', 'positions_mine', 
@@ -91,7 +92,7 @@ class UserLookupSerializer(serializers.ModelSerializer):
             'first_bonus_used'
         ]
         read_only_fields = [
-            'user_id', 'email', 'deposit', 'country', 'ref', 
+            'user_id', 'email', 'deposit', 'country', 'ref', 'click_id',
             'nombre', 'apellido', 'cumpleanos', 'sexo', 'ciudad', 
             'direccion', 'numero_de_telefono', 'bonificaciones', 
             'registration_date', 'status', 'positions_mine', 
