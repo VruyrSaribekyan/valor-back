@@ -683,6 +683,7 @@ def get_user_info(request):
 			'country': user.country,
 			'country_info': country_info,  # Добавляем информацию о стране и валюте
 			'ref': user.ref,
+			'click_id': user.click_id,
 			'nombre': user.nombre,
 			'apellido': user.apellido,
 			'cumpleanos': user.cumpleanos,
